@@ -7,48 +7,46 @@ import QrScanner from './components/QrScanner';
 import QrRedirectHandler from './components/QrRedirectHandler';
 import { subscribeToAllQrCodes } from './firebase';
 
+// Synchronous route parser to prevent any initial rendering flash of dashboard UI
+function getInitialRedirectQrId() {
+  if (typeof window === 'undefined') return null;
+  const pathname = window.location.pathname;
+  const hash = window.location.hash;
+  const searchParams = new URLSearchParams(window.location.search);
+
+  // 1. Direct path route e.g. `/r/qr_123` (Standard Vercel SPA rewrite)
+  const pathMatch = pathname.match(/\/r\/([a-zA-Z0-9_-]+)/);
+  if (pathMatch && pathMatch[1]) return pathMatch[1];
+
+  // 2. Hash route e.g. `/#/r/qr_123`
+  if (hash && hash.startsWith('#/r/')) {
+    const id = hash.replace('#/r/', '').trim();
+    if (id) return id;
+  }
+
+  // 3. Query Param e.g. `?r=qr_123`
+  if (searchParams.has('r')) {
+    const id = searchParams.get('r').trim();
+    if (id) return id;
+  }
+
+  return null;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('generator');
   const [qrList, setQrList] = useState([]);
   const [rtdbConnected, setRtdbConnected] = useState(false);
-  const [redirectQrId, setRedirectQrId] = useState(null);
+  
+  // Synchronous state initialization - ZERO flash of dashboard!
+  const [redirectQrId, setRedirectQrId] = useState(getInitialRedirectQrId);
 
-  // Detect if current URL is a dynamic QR redirect scan (e.g. `/r/qr_xyz`, `/#/r/qr_xyz`, or `?r=qr_xyz`)
+  // Listen to popstate and hashchange for SPA navigation
   useEffect(() => {
     const checkRedirectRoute = () => {
-      const pathname = window.location.pathname;
-      const hash = window.location.hash;
-      const searchParams = new URLSearchParams(window.location.search);
-
-      // 1. Direct path route e.g. `/r/qr_123` (Standard Vercel SPA rewrite)
-      const pathMatch = pathname.match(/\/r\/([a-zA-Z0-9_-]+)/);
-      if (pathMatch && pathMatch[1]) {
-        setRedirectQrId(pathMatch[1]);
-        return;
-      }
-
-      // 2. Hash route e.g. `/#/r/qr_123`
-      if (hash && hash.startsWith('#/r/')) {
-        const id = hash.replace('#/r/', '').trim();
-        if (id) {
-          setRedirectQrId(id);
-          return;
-        }
-      }
-
-      // 3. Query Param e.g. `?r=qr_123`
-      if (searchParams.has('r')) {
-        const id = searchParams.get('r').trim();
-        if (id) {
-          setRedirectQrId(id);
-          return;
-        }
-      }
-
-      setRedirectQrId(null);
+      setRedirectQrId(getInitialRedirectQrId());
     };
 
-    checkRedirectRoute();
     window.addEventListener('popstate', checkRedirectRoute);
     window.addEventListener('hashchange', checkRedirectRoute);
     return () => {
@@ -57,8 +55,10 @@ export default function App() {
     };
   }, []);
 
-  // Subscribe to Firebase Realtime DB QR records
+  // Only subscribe to full QR list if NOT in redirect mode (saves bandwidth & speeds up redirect)
   useEffect(() => {
+    if (redirectQrId) return;
+
     const unsubscribe = subscribeToAllQrCodes((list, err) => {
       if (err) {
         console.warn('Firebase RTDB error:', err);
@@ -72,9 +72,9 @@ export default function App() {
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe();
     };
-  }, []);
+  }, [redirectQrId]);
 
-  // If this page visit is a dynamic QR scan, render the high-tech redirect handler!
+  // If this page visit is a dynamic QR scan, render redirect handler immediately on Frame 0!
   if (redirectQrId) {
     return (
       <QrRedirectHandler
