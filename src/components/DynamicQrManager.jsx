@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import QRCodeStyling from 'qr-code-styling';
 import { 
   Edit3, 
   Check, 
@@ -14,10 +15,121 @@ import {
   Calendar, 
   Zap, 
   FileSpreadsheet,
-  AlertCircle
+  AlertCircle,
+  QrCode as QrIcon
 } from 'lucide-react';
 import { updateQrDestinationUrl, toggleQrActiveState, deleteQrCodeFromDb } from '../firebase';
 import { buildDynamicRedirectUrl, exportQrListToCsv, normalizeUrl, isValidUrl } from '../utils/qrHelpers';
+
+// QR Code Preview Modal
+function QrViewModal({ item, onClose }) {
+  const qrRef = useRef(null);
+  const qrCodeStylingRef = useRef(null);
+  const redirectUrl = buildDynamicRedirectUrl(item.id);
+
+  useEffect(() => {
+    const cust = item.customization || {};
+    const qrCode = new QRCodeStyling({
+      width: 260,
+      height: 260,
+      type: 'canvas',
+      data: redirectUrl,
+      image: cust.logoUrl || undefined,
+      dotsOptions: {
+        color: cust.fgColor || '#6366f1',
+        type: cust.dotsStyle || 'rounded'
+      },
+      backgroundOptions: {
+        color: cust.bgColor || '#ffffff',
+      },
+      cornersSquareOptions: {
+        color: cust.fgColor || '#6366f1',
+        type: cust.cornersStyle || 'extra-rounded'
+      }
+    });
+
+    qrCodeStylingRef.current = qrCode;
+
+    if (qrRef.current) {
+      qrRef.current.innerHTML = '';
+      qrCode.append(qrRef.current);
+    }
+  }, [item, redirectUrl]);
+
+  const handleDownload = (format = 'png') => {
+    if (qrCodeStylingRef.current) {
+      qrCodeStylingRef.current.download({
+        name: `${item.title || item.id}_qr`,
+        extension: format
+      });
+    }
+  };
+
+  return (
+    <div 
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.85)',
+        backdropFilter: 'blur(10px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999,
+        padding: '1rem'
+      }}
+    >
+      <div className="glass-panel" style={{ maxWidth: '420px', width: '100%', padding: '2rem', textAlign: 'center', position: 'relative' }}>
+        <button 
+          type="button" 
+          onClick={onClose}
+          style={{ position: 'absolute', right: '1rem', top: '1rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+        >
+          <X size={20} />
+        </button>
+
+        <div style={{ marginBottom: '1rem' }}>
+          <span className="badge badge-dynamic" style={{ marginBottom: '0.4rem' }}>Scan Me With Phone Camera</span>
+          <h3 style={{ fontSize: '1.3rem', color: 'white' }}>{item.title || item.id}</h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+            ID: <span className="font-mono text-cyan-400" style={{ color: '#06b6d4' }}>{item.id}</span>
+          </p>
+        </div>
+
+        {/* QR Code Canvas Card */}
+        <div 
+          style={{
+            padding: '1.25rem',
+            background: item.customization?.bgColor || '#ffffff',
+            borderRadius: '20px',
+            display: 'inline-block',
+            margin: '0.5rem auto 1.25rem auto',
+            boxShadow: '0 15px 35px rgba(0,0,0,0.5)',
+            border: '2px solid rgba(255,255,255,0.2)'
+          }}
+        >
+          <div ref={qrRef} />
+        </div>
+
+        {/* Current Destination URL */}
+        <div style={{ background: 'rgba(13, 17, 28, 0.85)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '0.82rem', color: 'var(--text-main)', marginBottom: '1.25rem', textAlign: 'left' }}>
+          <div style={{ color: 'var(--text-dim)', fontSize: '0.72rem', marginBottom: '2px' }}>Resolves to:</div>
+          <div style={{ color: 'var(--accent-emerald)', fontWeight: 600, wordBreak: 'break-all' }}>{item.destinationUrl}</div>
+        </div>
+
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+          <button type="button" onClick={() => handleDownload('png')} className="btn btn-primary btn-sm" style={{ flex: 1 }}>
+            <Download size={14} /> Download PNG
+          </button>
+          <button type="button" onClick={onClose} className="btn btn-secondary btn-sm" style={{ flex: 1 }}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function DynamicQrManager({ qrList, rtdbConnected }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,8 +141,9 @@ export default function DynamicQrManager({ qrList, rtdbConnected }) {
   const [savingEditId, setSavingEditId] = useState(null);
   const [editError, setEditError] = useState('');
 
-  // Delete modal state
+  // Modal states
   const [deletingItem, setDeletingItem] = useState(null);
+  const [viewingQrItem, setViewingQrItem] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
 
   // Filtered QR List
@@ -183,6 +296,7 @@ export default function DynamicQrManager({ qrList, rtdbConnected }) {
             <table className="qr-table">
               <thead>
                 <tr>
+                  <th>QR Preview</th>
                   <th>Reference & Short ID</th>
                   <th>Destination Target URL (Editable)</th>
                   <th>Status</th>
@@ -199,8 +313,22 @@ export default function DynamicQrManager({ qrList, rtdbConnected }) {
 
                   return (
                     <tr key={item.id}>
+                      {/* QR Code Quick Scan Button */}
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => setViewingQrItem(item)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '6px 10px', background: 'rgba(99, 102, 241, 0.15)', borderColor: 'rgba(99, 102, 241, 0.3)', color: '#818cf8' }}
+                          title="Show Scan QR Code"
+                        >
+                          <QrIcon size={16} />
+                          <span style={{ fontSize: '0.78rem' }}>Show QR</span>
+                        </button>
+                      </td>
+
                       {/* Title & Short ID */}
-                      <td style={{ minWidth: '200px' }}>
+                      <td style={{ minWidth: '180px' }}>
                         <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
                           {item.title || 'Untitled QR'}
                         </div>
@@ -218,7 +346,7 @@ export default function DynamicQrManager({ qrList, rtdbConnected }) {
                       </td>
 
                       {/* Destination URL (Inline Editable!) */}
-                      <td style={{ minWidth: '320px' }}>
+                      <td style={{ minWidth: '300px' }}>
                         {isEditingThis ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -261,7 +389,7 @@ export default function DynamicQrManager({ qrList, rtdbConnected }) {
                               style={{
                                 color: 'var(--text-main)',
                                 textDecoration: 'none',
-                                maxWidth: '260px',
+                                maxWidth: '240px',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
@@ -333,6 +461,15 @@ export default function DynamicQrManager({ qrList, rtdbConnected }) {
                       {/* Action Menu */}
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => setViewingQrItem(item)}
+                            className="btn btn-secondary btn-sm"
+                            title="View / Scan QR Code"
+                          >
+                            <QrIcon size={14} />
+                          </button>
+
                           <a
                             href={redirectUrl}
                             target="_blank"
@@ -361,6 +498,14 @@ export default function DynamicQrManager({ qrList, rtdbConnected }) {
           </div>
         )}
       </div>
+
+      {/* QR Code Scan Modal */}
+      {viewingQrItem && (
+        <QrViewModal
+          item={viewingQrItem}
+          onClose={() => setViewingQrItem(null)}
+        />
+      )}
 
       {/* Delete Confirmation Modal */}
       {deletingItem && (
