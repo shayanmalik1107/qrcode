@@ -56,11 +56,9 @@ export default function QrRedirectHandler({ qrId, onGoHome }) {
     return () => { isMounted = false; };
   }, [qrId]);
 
-  // If redirecting, render a clean dark screen so redirection is instantaneous and seamless
+  // Maintain browser default native loading screen during redirect
   if (status === 'redirecting') {
-    return (
-      <div style={{ minHeight: '100vh', background: '#090d16' }} />
-    );
+    return null;
   }
 
   return (

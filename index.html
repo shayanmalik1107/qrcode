@@ -7,7 +7,7 @@
     <title>QR Pulse | Dynamic & Static QR Code Generator & Redirect Management System</title>
     <meta name="description" content="Generate dynamic & static QR codes with real-time analytics, edit redirect URLs anytime without reprinting, customize designs, and track scans powered by Firebase Realtime Database." />
     
-    <!-- Ultra-fast Inline Redirect Interceptor (Zero UI Flash) -->
+    <!-- Ultra-fast Inline Redirect Interceptor (Native Browser Loading) -->
     <script>
       (function() {
         try {
@@ -27,22 +27,16 @@
           }
 
           if (id) {
-            // Apply pitch black background immediately to prevent any UI flash
-            document.documentElement.style.background = '#090d16';
-            document.documentElement.style.color = '#090d16';
-
-            // Direct REST API fetch from Firebase (completes in ~30ms before React renders)
+            // Direct REST API fetch from Firebase (completes in ~20-30ms)
             fetch('https://qrcode-d2c90-default-rtdb.firebaseio.com/qrcodes/' + id + '.json')
               .then(function(res) { return res.json(); })
               .then(function(data) {
                 if (data && data.active !== false && data.destinationUrl) {
-                  // Direct immediate navigation to target URL
+                  // Immediate native browser location replacement
                   window.location.replace(data.destinationUrl);
                 }
               })
-              .catch(function(e) {
-                console.warn('Fast redirect fetch:', e);
-              });
+              .catch(function(e) {});
           }
         } catch(e) {}
       })();
