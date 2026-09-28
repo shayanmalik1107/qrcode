@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/r/:id",
-      "destination": "/index.html"
+      "destination": "/api/r?id=:id"
     },
     {
       "source": "/(.*)",
