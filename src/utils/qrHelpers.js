@@ -1,6 +1,34 @@
 // Helper utilities for QR Code payload generation, validation, and URL construction
 
 /**
+ * Get configured Base App URL (e.g. Vercel deployment URL) or fallback to current origin
+ */
+export function getBaseAppUrl() {
+  const saved = localStorage.getItem('qr_base_app_url');
+  if (saved && saved.trim()) {
+    return saved.trim().replace(/\/$/, '');
+  }
+  const origin = window.location.origin;
+  const path = window.location.pathname.replace(/\/$/, '');
+  return `${origin}${path}`;
+}
+
+/**
+ * Set custom Base App URL (for Vercel or custom domain)
+ */
+export function setBaseAppUrl(urlStr) {
+  if (urlStr && urlStr.trim()) {
+    let trimmed = urlStr.trim().replace(/\/$/, '');
+    if (!/^https?:\/\//i.test(trimmed)) {
+      trimmed = 'https://' + trimmed;
+    }
+    localStorage.setItem('qr_base_app_url', trimmed);
+  } else {
+    localStorage.removeItem('qr_base_app_url');
+  }
+}
+
+/**
  * Generate a unique short ID for Dynamic QR codes (e.g. `qr_x89a2b`)
  */
 export function generateShortId(length = 7) {
@@ -36,12 +64,11 @@ export function isValidUrl(urlStr) {
 
 /**
  * Build the full Redirect URL encoded inside the Dynamic QR code.
- * We use `/#/r/${shortId}` or `?r=${shortId}` so it works anywhere!
+ * Clean Vercel format: `https://your-domain.vercel.app/r/${shortId}`
  */
 export function buildDynamicRedirectUrl(shortId) {
-  const origin = window.location.origin;
-  const path = window.location.pathname.replace(/\/$/, '');
-  return `${origin}${path}/#/r/${shortId}`;
+  const baseUrl = getBaseAppUrl();
+  return `${baseUrl}/r/${shortId}`;
 }
 
 /**

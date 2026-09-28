@@ -13,13 +13,21 @@ export default function App() {
   const [rtdbConnected, setRtdbConnected] = useState(false);
   const [redirectQrId, setRedirectQrId] = useState(null);
 
-  // Detect if current URL is a dynamic QR redirect scan (e.g. `/#/r/qr_xyz` or `?r=qr_xyz`)
+  // Detect if current URL is a dynamic QR redirect scan (e.g. `/r/qr_xyz`, `/#/r/qr_xyz`, or `?r=qr_xyz`)
   useEffect(() => {
     const checkRedirectRoute = () => {
+      const pathname = window.location.pathname;
       const hash = window.location.hash;
       const searchParams = new URLSearchParams(window.location.search);
 
-      // Check Hash route e.g. `/#/r/qr_123`
+      // 1. Direct path route e.g. `/r/qr_123` (Standard Vercel SPA rewrite)
+      const pathMatch = pathname.match(/\/r\/([a-zA-Z0-9_-]+)/);
+      if (pathMatch && pathMatch[1]) {
+        setRedirectQrId(pathMatch[1]);
+        return;
+      }
+
+      // 2. Hash route e.g. `/#/r/qr_123`
       if (hash && hash.startsWith('#/r/')) {
         const id = hash.replace('#/r/', '').trim();
         if (id) {
@@ -28,7 +36,7 @@ export default function App() {
         }
       }
 
-      // Check Query Param e.g. `?r=qr_123`
+      // 3. Query Param e.g. `?r=qr_123`
       if (searchParams.has('r')) {
         const id = searchParams.get('r').trim();
         if (id) {
@@ -41,8 +49,12 @@ export default function App() {
     };
 
     checkRedirectRoute();
+    window.addEventListener('popstate', checkRedirectRoute);
     window.addEventListener('hashchange', checkRedirectRoute);
-    return () => window.removeEventListener('hashchange', checkRedirectRoute);
+    return () => {
+      window.removeEventListener('popstate', checkRedirectRoute);
+      window.removeEventListener('hashchange', checkRedirectRoute);
+    };
   }, []);
 
   // Subscribe to Firebase Realtime DB QR records
@@ -68,8 +80,7 @@ export default function App() {
       <QrRedirectHandler
         qrId={redirectQrId}
         onGoHome={() => {
-          window.location.hash = '';
-          window.location.search = '';
+          window.history.pushState({}, '', '/');
           setRedirectQrId(null);
         }}
       />
