@@ -7,6 +7,47 @@
     <title>QR Pulse | Dynamic & Static QR Code Generator & Redirect Management System</title>
     <meta name="description" content="Generate dynamic & static QR codes with real-time analytics, edit redirect URLs anytime without reprinting, customize designs, and track scans powered by Firebase Realtime Database." />
     
+    <!-- Ultra-fast Inline Redirect Interceptor (Zero UI Flash) -->
+    <script>
+      (function() {
+        try {
+          var path = window.location.pathname;
+          var hash = window.location.hash;
+          var search = window.location.search;
+          var id = null;
+
+          var pathMatch = path.match(/\/r\/([a-zA-Z0-9_-]+)/);
+          if (pathMatch && pathMatch[1]) {
+            id = pathMatch[1];
+          } else if (hash && hash.indexOf('#/r/') === 0) {
+            id = hash.replace('#/r/', '').trim();
+          } else if (search.indexOf('r=') !== -1) {
+            var params = new URLSearchParams(search);
+            id = params.get('r');
+          }
+
+          if (id) {
+            // Apply pitch black background immediately to prevent any UI flash
+            document.documentElement.style.background = '#090d16';
+            document.documentElement.style.color = '#090d16';
+
+            // Direct REST API fetch from Firebase (completes in ~30ms before React renders)
+            fetch('https://qrcode-d2c90-default-rtdb.firebaseio.com/qrcodes/' + id + '.json')
+              .then(function(res) { return res.json(); })
+              .then(function(data) {
+                if (data && data.active !== false && data.destinationUrl) {
+                  // Direct immediate navigation to target URL
+                  window.location.replace(data.destinationUrl);
+                }
+              })
+              .catch(function(e) {
+                console.warn('Fast redirect fetch:', e);
+              });
+          }
+        } catch(e) {}
+      })();
+    </script>
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
